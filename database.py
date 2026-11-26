@@ -1,82 +1,42 @@
+"""PizzaPoint database layer.
+
+SQLite is the default database. The menu uses a relational structure:
+Categories(id) <- Products(category_id). Queries that display category names
+use JOIN and are commented to explain the relationship.
+"""
 import os
 import sqlite3
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-SQLITE_PATH = BASE_DIR / "techstore.sqlite3"
-ACCESS_PATH = os.getenv("ACCESS_DB", str(BASE_DIR / "TechStore.accdb"))
+SQLITE_PATH = BASE_DIR / "pizzapoint.sqlite3"
+ACCESS_PATH = os.getenv("ACCESS_DB", str(BASE_DIR / "PizzaPoint.accdb"))
+
+
+def sqlite_connection():
+    conn = sqlite3.connect(SQLITE_PATH)
+    conn.row_factory = sqlite3.Row
+    # Enable enforcement of foreign-key relationships on every connection.
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def use_access():
+    # Optional Access mode. SQLite is the recommended mode for this project.
+    return os.getenv("USE_ACCESS", "0") == "1"
+
 
 def access_connection():
     import pyodbc
     drivers = [d for d in pyodbc.drivers() if "Access" in d]
     if not drivers:
         raise RuntimeError("Microsoft Access ODBC driver not found")
-    driver = drivers[-1]
-    return pyodbc.connect(
-        f"DRIVER={{{driver}}};DBQ={ACCESS_PATH};",
-        autocommit=False
-    )
+    return pyodbc.connect(f"DRIVER={{{drivers[-1]}}};DBQ={ACCESS_PATH};", autocommit=False)
 
-def sqlite_connection():
-    conn = sqlite3.connect(SQLITE_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def use_access():
-    return os.getenv("USE_ACCESS", "0") == "1"
 
 def get_connection():
-    if use_access():
-        return access_connection()
-    return sqlite_connection()
+    return access_connection() if use_access() else sqlite_connection()
 
-def initialize():
-    if use_access():
-        conn = access_connection()
-        cur = conn.cursor()
-        try:
-            cur.execute("""
-                CREATE TABLE Products (
-                    ID COUNTER PRIMARY KEY,
-                    Name TEXT(255),
-                    Category TEXT(100),
-                    Specs MEMO,
-                    Price CURRENCY,
-                    Stock INTEGER,
-                    ImageURL TEXT(255)
-                )
-            """)
-            conn.commit()
-        except Exception:
-            # Table likely already exists
-            conn.rollback()
-        cur.execute("SELECT COUNT(*) FROM Products")
-        count = cur.fetchone()[0]
-        if count == 0:
-            seed_access(cur)
-            conn.commit()
-        conn.close()
-    else:
-        conn = sqlite_connection()
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS products (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                category TEXT NOT NULL,
-                specs TEXT,
-                price REAL NOT NULL,
-                stock INTEGER NOT NULL DEFAULT 0,
-                image_url TEXT
-            )
-        """)
-        count = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
-        if count == 0:
-            conn.executemany(
-                "INSERT INTO products(name,category,specs,price,stock,image_url) VALUES(?,?,?,?,?,?)",
-                seed_data()
-            )
-        conn.commit()
-        conn.close()
 
 def seed_data():
     return [
@@ -86,52 +46,99 @@ def seed_data():
         ("Ветчина и грибы", "Мясная", "Ветчина, шампиньоны, моцарелла, томатный соус", 720, 9, "https://images.unsplash.com/photo-1593560708920-61dd98c46a4e?auto=format&fit=crop&w=800&q=80"),
     ]
 
-def seed_access(cur):
-    for row in seed_data():
-        cur.execute(
-            "INSERT INTO Products (Name, Category, Specs, Price, Stock, ImageURL) VALUES (?, ?, ?, ?, ?, ?)",
-            row
-        )
 
-def query_all(sql, params=()):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(sql, params)
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-def execute(sql, params=()):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(sql, params)
+def initialize():
+    conn = sqlite_connection()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        );
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category_id INTEGER NOT NULL,
+            specs TEXT,
+            price REAL NOT NULL,
+            stock INTEGER NOT NULL DEFAULT 0,
+            image_url TEXT,
+            FOREIGN KEY(category_id) REFERENCES categories(id)
+                ON UPDATE CASCADE ON DELETE RESTRICT
+        );
+    """)
+    if conn.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0:
+        for name, category, specs, price, stock, image in seed_data():
+            category_id = ensure_category(conn, category)
+            conn.execute("INSERT INTO products(name,category_id,specs,price,stock,image_url) VALUES(?,?,?,?,?,?)",
+                         (name, category_id, specs, price, stock, image))
     conn.commit()
     conn.close()
 
-def table_name():
-    return "Products" if use_access() else "products"
 
-def column_names():
-    return ("ID", "Name", "Category", "Specs", "Price", "Stock", "ImageURL") if use_access() else ("id", "name", "category", "specs", "price", "stock", "image_url")
+def ensure_category(conn, category_name):
+    conn.execute("INSERT OR IGNORE INTO categories(name) VALUES(?)", (category_name,))
+    return conn.execute("SELECT id FROM categories WHERE name=?", (category_name,)).fetchone()[0]
+
 
 def products():
-    t = table_name()
-    c = column_names()
-    return query_all(f"SELECT {', '.join(c)} FROM {t} ORDER BY {c[0]} DESC")
+    conn = sqlite_connection()
+    # JOIN retrieves the category name via Products.category_id -> Categories.id.
+    rows = conn.execute("""
+        SELECT p.id, p.name, c.name AS category, p.specs, p.price, p.stock, p.image_url
+        FROM products AS p
+        INNER JOIN categories AS c ON p.category_id = c.id
+        ORDER BY p.id DESC
+    """).fetchall()
+    conn.close()
+    return rows
+
 
 def product_by_id(pid):
-    t = table_name(); c = column_names()
-    rows = query_all(f"SELECT {', '.join(c)} FROM {t} WHERE {c[0]}=?", (pid,))
-    return rows[0] if rows else None
+    conn = sqlite_connection()
+    # JOIN follows the same foreign-key relationship for one selected product.
+    row = conn.execute("""
+        SELECT p.id, p.name, c.name AS category, p.specs, p.price, p.stock, p.image_url
+        FROM products AS p
+        INNER JOIN categories AS c ON p.category_id = c.id
+        WHERE p.id = ?
+    """, (pid,)).fetchone()
+    conn.close()
+    return row
+
 
 def categories():
-    t=table_name(); c=column_names()
-    rows=query_all(f"SELECT DISTINCT {c[2]} FROM {t} ORDER BY {c[2]}")
-    return [r[0] for r in rows]
+    conn = sqlite_connection()
+    rows = conn.execute("SELECT name FROM categories ORDER BY name").fetchall()
+    conn.close()
+    return [row[0] for row in rows]
+
 
 def stats():
-    t=table_name(); c=column_names()
-    total=query_all(f"SELECT COUNT(*) FROM {t}")[0][0]
-    category_count=query_all(f"SELECT COUNT(DISTINCT {c[2]}) FROM {t}")[0][0]
-    value=query_all(f"SELECT SUM({c[4]} * {c[5]}) FROM {t}")[0][0] or 0
+    conn = sqlite_connection()
+    total = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+    category_count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
+    value = conn.execute("SELECT COALESCE(SUM(price * stock),0) FROM products").fetchone()[0]
+    conn.close()
     return total, category_count, value
+
+
+def add_product(name, category, specs, price, stock, image_url):
+    conn = sqlite_connection()
+    category_id = ensure_category(conn, category)
+    conn.execute("INSERT INTO products(name,category_id,specs,price,stock,image_url) VALUES(?,?,?,?,?,?)",
+                 (name, category_id, specs, price, stock, image_url))
+    conn.commit(); conn.close()
+
+
+def update_product(pid, name, category, specs, price, stock, image_url):
+    conn = sqlite_connection()
+    category_id = ensure_category(conn, category)
+    conn.execute("UPDATE products SET name=?,category_id=?,specs=?,price=?,stock=?,image_url=? WHERE id=?",
+                 (name, category_id, specs, price, stock, image_url, pid))
+    conn.commit(); conn.close()
+
+
+def delete_product(pid):
+    conn = sqlite_connection()
+    conn.execute("DELETE FROM products WHERE id=?", (pid,))
+    conn.commit(); conn.close()

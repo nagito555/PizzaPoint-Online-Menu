@@ -113,7 +113,7 @@ def add_product():
   try:price=float(request.form.get('price',0));stock=int(request.form.get('stock',0))
   except:flash('Цена и количество должны быть числами.','error');return render_template('add_product.html')
   if not name or not category or price<0 or stock<0:flash('Проверь поля формы.','error');return render_template('add_product.html')
-  t=db.table_name();c=db.column_names();db.execute(f'INSERT INTO {t} ({c[1]}, {c[2]}, {c[3]}, {c[4]}, {c[5]}, {c[6]}) VALUES (?, ?, ?, ?, ?, ?)',(name,category,specs,price,stock,image));flash('Товар добавлен.','success');return redirect(url_for('index'))
+  db.add_product(name,category,specs,price,stock,image);flash('Пицца добавлена.','success');return redirect(url_for('index'))
  return render_template('add_product.html')
 @app.route('/edit/<int:pid>',methods=['GET','POST'])
 @admin_required
@@ -126,10 +126,10 @@ def edit_product(pid):
   try:p['price']=float(request.form.get('price',0));p['stock']=int(request.form.get('stock',0))
   except:flash('Цена/остаток должны быть числами.','error');return render_template('edit_product.html',product=p)
   if not p['name'] or not p['category'] or p['price']<0 or p['stock']<0:flash('Проверь поля.','error');return render_template('edit_product.html',product=p)
-  t=db.table_name();c=db.column_names();db.execute(f'UPDATE {t} SET {c[1]}=?,{c[2]}=?,{c[3]}=?,{c[4]}=?,{c[5]}=?,{c[6]}=? WHERE {c[0]}=?',(p['name'],p['category'],p['specs'],p['price'],p['stock'],p['image_url'],pid));flash('Изменения сохранены.','success');return redirect(url_for('index'))
+  db.update_product(pid,p['name'],p['category'],p['specs'],p['price'],p['stock'],p['image_url']);flash('Изменения сохранены.','success');return redirect(url_for('index'))
  return render_template('edit_product.html',product=p)
 @app.route('/delete/<int:pid>',methods=['POST'])
 @admin_required
 def delete_product(pid):
- t=db.table_name();c=db.column_names();db.execute(f'DELETE FROM {t} WHERE {c[0]}=?',(pid,));authdb.remove_product(pid);flash('Товар удалён.','success');return redirect(url_for('index'))
+ db.delete_product(pid);authdb.remove_product(pid);flash('Пицца удалена.','success');return redirect(url_for('index'))
 if __name__=='__main__':app.run(debug=True)
