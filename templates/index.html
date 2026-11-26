@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}PizzaPoint — Меню{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <div class="eyebrow"><span class="pulse"></span> ПИЦЦА • СВЕЖИЕ ИНГРЕДИЕНТЫ</div>
+    <h1>Горячая пицца.<br><span>Большое удовольствие.</span></h1>
+    <p>Выбирай любимый вкус — приготовим с любовью и свежими ингредиентами.</p>
+    <a class="button primary" href="#catalog">Смотреть меню <span>↘</span></a>
+  </div>
+  <div class="hero-art">
+    <div class="orb"></div><div class="chip"><span>PIZZA</span><strong>POINT</strong><small>FRESH DAILY</small></div>
+    <div class="art-caption">MADE WITH<br>LOVE</div>
+  </div>
+</section>
+<section class="stats">
+  <div class="stat"><span>Пицц в меню</span><strong>{{ total }}</strong><small>позиций меню</small></div>
+  <div class="stat"><span>Категорий</span><strong>{{ category_count }}</strong><small>разных вкусов</small></div>
+  <div class="stat"><span>Всего в наличии</span><strong>{{ "{:,.0f}".format(value).replace(",", " ") }} ₽</strong><small>свежая и вкусная</small></div>
+</section>
+<section id="catalog" class="catalog-head">
+  <div><div class="eyebrow">НАШЕ МЕНЮ</div><h2>Меню <span>пиццы</span></h2></div>
+  <form class="search" method="get" action="{{ url_for('index') }}">
+    <span>⌕</span><input name="q" value="{{ search }}" placeholder="Найти пиццу...">
+    {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+    <button type="submit">Найти</button>
+  </form>
+</section>
+<div class="filters">
+  <a class="filter {% if not selected_category %}active{% endif %}" href="{{ url_for('index', q=search) }}">Все пиццы</a>
+  {% for cat in categories %}<a class="filter {% if selected_category==cat %}active{% endif %}" href="{{ url_for('index', category=cat, q=search) }}">{{ cat }}</a>{% endfor %}
+</div>
+<div class="product-grid">
+  {% for p in products %}
+  <article class="product-card">
+    <div class="product-image">
+      {% if p.image_url %}<img src="{{ p.image_url }}" alt="{{ p.name }}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">{% endif %}
+      <div class="image-fallback" {% if p.image_url %}style="display:none"{% endif %}>🍕</div>
+      <span class="category-tag">{{ p.category }}</span>
+    </div>
+    <div class="product-info">
+      <h3>{{ p.name }}</h3><p class="specs">{{ p.specs }}</p>
+      <div class="product-bottom"><div><strong class="price">{{ "{:,.0f}".format(p.price).replace(",", " ") }} ₽</strong><small class="stock {% if p.stock==0 %}out{% endif %}">{% if p.stock>0 %}Порций: {{ p.stock }}{% else %}Закончилась{% endif %}</small></div>
+        <div class="actions">{% if logged_user and is_admin %}<a class="icon-btn" title="Редактировать" href="{{ url_for('edit_product', pid=p.id) }}">✎</a><form method="post" action="{{ url_for('delete_product', pid=p.id) }}" onsubmit="return confirm('Удалить товар?')"><button class="icon-btn delete" title="Удалить">×</button></form>{% elif logged_user %}<form method="post" action="{{ url_for('add_cart', pid=p.id) }}"><button class="add-cart" title="В корзину">В корзину</button></form>{% else %}<a class="add-cart" href="{{ url_for('login') }}" title="Войдите, чтобы добавить">В корзину</a>{% endif %}</div>
+      </div>
+    </div>
+  </article>
+  {% else %}
+  <div class="empty"><div>⌕</div><h3>Пицца не найдена</h3><p>Попробуй изменить поисковый запрос.</p><a href="{{ url_for('index') }}" class="button primary">Сбросить фильтры</a></div>
+  {% endfor %}
+</div>
+{% endblock %}

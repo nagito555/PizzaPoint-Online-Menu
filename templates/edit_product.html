@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Редактирование — PizzaPoint{% endblock %}
+{% block content %}
+<div class="form-wrap"><a class="back" href="{{ url_for('index') }}">← Назад к каталогу</a><div class="eyebrow">УПРАВЛЕНИЕ КАТАЛОГОМ</div><h1>Редактировать <span>пиццу</span></h1><p class="form-lead">Измени данные устройства и сохрани.</p>
+<form class="product-form" method="post">
+  <label>Название пиццуа<input name="name" required value="{{ product.name }}"></label>
+  <label>Категория<input name="category" required value="{{ product.category }}"></label>
+  <label>Состав<textarea name="specs" rows="3">{{ product.specs }}</textarea></label>
+  <div class="two-col"><label>Цена (₽)<input type="number" name="price" min="0" step="0.01" required value="{{ product.price }}"></label><label>Количество на складе<input type="number" name="stock" min="0" required value="{{ product.stock }}"></label></div>
+  <label>Ссылка на изображение<input name="image_url" type="url" value="{{ product.image_url }}"></label>
+  <button class="button primary full" type="submit">Сохранить изменения</button>
+</form></div>
+{% endblock %}

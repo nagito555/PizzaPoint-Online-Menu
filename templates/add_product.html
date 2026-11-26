@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Добавление пиццуа — PizzaPoint{% endblock %}
+{% block content %}
+<div class="form-wrap"><a class="back" href="{{ url_for('index') }}">← Назад к каталогу</a><div class="eyebrow">УПРАВЛЕНИЕ КАТАЛОГОМ</div><h1>Добавить <span>пиццу</span></h1><p class="form-lead">Заполни характеристики нового устройства.</p>
+<form class="product-form" method="post">
+  <label>Название пиццуа<input name="name" required placeholder="Например, GeForce RTX 4070"></label>
+  <label>Категория<input name="category" required placeholder="Видеокарты, ноутбуки, SSD..."></label>
+  <label>Состав<textarea name="specs" rows="3" placeholder="Объём памяти, частота, интерфейс..."></textarea></label>
+  <div class="two-col"><label>Цена (₽)<input type="number" name="price" min="0" step="0.01" required placeholder="0"></label><label>Количество на складе<input type="number" name="stock" min="0" required placeholder="0"></label></div>
+  <label>Ссылка на изображение (необязательно)<input name="image_url" type="url" placeholder="https://..."></label>
+  <button class="button primary full" type="submit">＋ Сохранить пиццу</button>
+</form></div>
+{% endblock %}
